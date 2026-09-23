@@ -23,7 +23,6 @@ class ChatService {
         do {
             let response = try await postChat(text)
             
-            // Cloud's text reply
             let assistantMessage = Message(
                 role: .assistant,
                 content: response.reply,
@@ -33,7 +32,6 @@ class ChatService {
             await MainActor.run {
                 messages.append(assistantMessage)
                 
-                // Each card becomes its own message from Cloud
                 for card in response.cards {
                     let cardMessage = Message(
                         role: .assistant,
@@ -62,7 +60,13 @@ class ChatService {
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         
-        let body = ["message": message]
+        // Include the user's preferred language on every request.
+        // The BFF uses this to update the user's profile if it changes,
+        // so Cloud always responds in the current language.
+        var body: [String: Any] = ["message": message]
+        if let language = UserPreferences.preferredLanguage {
+            body["language"] = language
+        }
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
         
         let (data, response) = try await URLSession.shared.data(for: request)
@@ -82,8 +86,6 @@ class ChatService {
     }
 }
 
-// MARK: - Server Response
-
 private struct ChatResponse: Decodable {
     let reply: String
     let cards: [Card]
@@ -97,7 +99,6 @@ private struct ChatResponse: Decodable {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         reply = try container.decode(String.self, forKey: .reply)
         
-        // Cards are optional; older BFFs may not include the array
         if let cardsArray = try? container.decode([Card].self, forKey: .cards) {
             cards = cardsArray.filter { $0 != .unknown }
         } else {
