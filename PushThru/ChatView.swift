@@ -52,19 +52,10 @@ struct ChatView: View {
     
     private var header: some View {
         HStack(spacing: 10) {
-            ZStack {
-                Circle()
-                    .fill(
-                        LinearGradient(
-                            colors: [Color(hex: "6C63FF"), Color(hex: "48B4E0")],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-                    .frame(width: 36, height: 36)
-                
-                Text("☁️").font(.system(size: 18))
-            }
+            Image("PushThruLogo")
+                .resizable()
+                .scaledToFit()
+                .frame(width: 36, height: 36)
             
             VStack(alignment: .leading, spacing: 1) {
                 Text("PushThru").font(.headline).foregroundColor(.primary)
@@ -185,7 +176,6 @@ struct PlanOverviewCardView: View {
     
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            // Header
             HStack(spacing: 6) {
                 Circle()
                     .fill(Color(hex: "6C63FF"))
@@ -201,7 +191,6 @@ struct PlanOverviewCardView: View {
                 }
             }
             
-            // Exercises
             VStack(spacing: 8) {
                 ForEach(plan.exercises) { exercise in
                     HStack(alignment: .firstTextBaseline, spacing: 8) {
@@ -230,7 +219,6 @@ struct PlanOverviewCardView: View {
                 }
             }
             
-            // Safety notes footer
             if !plan.safetyNotes.isEmpty {
                 Divider()
                 HStack(alignment: .top, spacing: 6) {
@@ -267,7 +255,6 @@ struct SessionSummaryCardView: View {
     
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            // Header
             HStack(spacing: 6) {
                 Image(systemName: "checkmark.circle.fill")
                     .font(.system(size: 12))
@@ -283,7 +270,6 @@ struct SessionSummaryCardView: View {
                 }
             }
             
-            // Exercises
             VStack(spacing: 6) {
                 ForEach(summary.exercises) { exercise in
                     HStack {
@@ -300,7 +286,6 @@ struct SessionSummaryCardView: View {
             
             Divider()
             
-            // Totals
             HStack(spacing: 16) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Sets").font(.system(size: 10)).foregroundColor(.secondary)
