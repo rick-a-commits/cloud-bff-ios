@@ -4,6 +4,7 @@ import Combine
 struct ChatView: View {
     @State private var chatService = ChatService()
     @State private var inputText = ""
+    @State private var showingSettings = false
     @FocusState private var isInputFocused: Bool
     
     var body: some View {
@@ -48,6 +49,9 @@ struct ChatView: View {
             inputBar
         }
         .background(Color(.systemBackground))
+        .sheet(isPresented: $showingSettings) {
+            SettingsView()
+        }
     }
     
     private var header: some View {
@@ -63,6 +67,12 @@ struct ChatView: View {
             }
             
             Spacer()
+            
+            Button(action: { showingSettings = true }) {
+                Image(systemName: "gearshape")
+                    .font(.system(size: 18))
+                    .foregroundColor(.secondary)
+            }
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)

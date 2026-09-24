@@ -1,28 +1,31 @@
 import SwiftUI
 
-/// Auth state — for now, a simple flag stored in UserDefaults.
-/// When we integrate MSAL, this will hold the actual token state.
-enum AuthState {
-    private static let signedInKey = "pushthru.signedIn"
-    
-    static var isSignedIn: Bool {
-        get { UserDefaults.standard.bool(forKey: signedInKey) }
-        set { UserDefaults.standard.set(newValue, forKey: signedInKey) }
-    }
-}
-
 @main
 struct PushThruApp: App {
     @State private var hasSelectedLanguage = UserPreferences.hasSelectedLanguage
-    @State private var isSignedIn = AuthState.isSignedIn
-    
+    @State private var auth = AuthService.shared
+
     var body: some Scene {
         WindowGroup {
             rootView
                 .preferredColorScheme(.dark)
+                .onOpenURL { url in
+                    AuthService.handleRedirect(url)
+                }
+                .alert(
+                    "Sign-in problem",
+                    isPresented: Binding(
+                        get: { auth.errorMessage != nil },
+                        set: { if !$0 { auth.errorMessage = nil } }
+                    )
+                ) {
+                    Button("OK", role: .cancel) {}
+                } message: {
+                    Text(auth.errorMessage ?? "")
+                }
         }
     }
-    
+
     @ViewBuilder
     private var rootView: some View {
         if !hasSelectedLanguage {
@@ -31,27 +34,27 @@ struct PushThruApp: App {
                     hasSelectedLanguage = true
                 }
             }
-        } else if !isSignedIn {
+        } else if !auth.isSignedIn {
             WelcomeView(
                 onSignIn: {
-                    // Placeholder: for now, just flip the flag so we can see the chat.
-                    // Next session, this triggers the MSAL sign-in flow.
-                    AuthState.isSignedIn = true
-                    withAnimation {
-                        isSignedIn = true
-                    }
+                    Task { await auth.signIn() }
                 },
                 onCreateAccount: {
-                    // Placeholder: same as sign in for now.
-                    // Next session, this triggers the MSAL sign-up flow, then DOB screen.
-                    AuthState.isSignedIn = true
-                    withAnimation {
-                        isSignedIn = true
-                    }
+                    // Opens the hosted page directly on the sign-up view.
+                    // DOB / age gate gets inserted after first sign-up (next step).
+                    Task { await auth.createAccount() }
                 }
             )
+            .disabled(auth.isWorking)
+            .overlay {
+                if auth.isWorking {
+                    ProgressView()
+                        .controlSize(.large)
+                }
+            }
         } else {
             ChatView()
         }
     }
 }
+
