@@ -12,6 +12,10 @@ class ChatService {
     var messages: [Message] = []
     var isLoading = false
 
+    /// Sentinel the BFF recognizes as "the app just opened, greet the user" —
+    /// never shown as a message bubble and never stored as a real user turn.
+    private static let greetingTrigger = "__init__"
+
     func send(_ text: String) async {
         let userMessage = Message(role: .user, content: text, timestamp: Date())
 
@@ -22,42 +26,46 @@ class ChatService {
 
         do {
             let response = try await postChat(text)
-
-            let assistantMessage = Message(
-                role: .assistant,
-                content: response.reply,
-                timestamp: Date()
-            )
-
-            await MainActor.run {
-                messages.append(assistantMessage)
-
-                for card in response.cards {
-                    let cardMessage = Message(
-                        role: .assistant,
-                        content: "",
-                        timestamp: Date(),
-                        card: card
-                    )
-                    messages.append(cardMessage)
-                }
-
-                isLoading = false
-            }
+            await appendResponse(response)
         } catch ChatError.unauthorized {
-            await MainActor.run {
-                isLoading = false
-            }
-            // Token rejected by the BFF: return to the Welcome screen
+            await MainActor.run { isLoading = false }
             await AuthService.shared.signOut()
         } catch {
             let errorMessage = Message(role: .assistant, content: "Connection error. Please try again.", timestamp: Date())
-
             await MainActor.run {
                 messages.append(errorMessage)
                 isLoading = false
             }
         }
+    }
+
+    /// Fires once when the chat opens with no history, so Cloud greets the
+    /// user proactively instead of showing a blank screen until they type.
+    /// No user bubble appears for this — only Cloud's reply (and any cards).
+    func requestGreeting() async {
+        guard messages.isEmpty else { return }
+
+        await MainActor.run { isLoading = true }
+
+        do {
+            let response = try await postChat(Self.greetingTrigger)
+            await appendResponse(response)
+        } catch {
+            // Silent failure: worst case the user just sees the empty state
+            // and types first, same as before this feature existed.
+            await MainActor.run { isLoading = false }
+        }
+    }
+
+    @MainActor
+    private func appendResponse(_ response: ChatResponse) {
+        if !response.reply.isEmpty {
+            messages.append(Message(role: .assistant, content: response.reply, timestamp: Date()))
+        }
+        for card in response.cards {
+            messages.append(Message(role: .assistant, content: "", timestamp: Date(), card: card))
+        }
+        isLoading = false
     }
 
     private func postChat(_ message: String) async throws -> ChatResponse {
@@ -66,7 +74,6 @@ class ChatService {
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
 
-        // Attach the Entra access token. MSAL refreshes it silently when needed.
         guard let token = await AuthService.shared.accessToken() else {
             throw ChatError.unauthorized
         }
@@ -120,4 +127,3 @@ private struct ChatResponse: Decodable {
         }
     }
 }
-

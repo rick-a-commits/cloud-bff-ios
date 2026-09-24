@@ -49,6 +49,9 @@ struct ChatView: View {
             inputBar
         }
         .background(Color(.systemBackground))
+        .task {
+            await chatService.requestGreeting()
+        }
         .sheet(isPresented: $showingSettings) {
             SettingsView()
         }
