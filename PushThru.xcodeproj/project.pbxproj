@@ -19,6 +19,7 @@
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
 				Info.plist,
+				Untitled.swift,
 			);
 			target = 000000000000000100000000 /* PushThru */;
 		};

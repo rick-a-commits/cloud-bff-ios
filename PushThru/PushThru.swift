@@ -4,6 +4,7 @@ import SwiftUI
 struct PushThruApp: App {
     @State private var hasSelectedLanguage = UserPreferences.hasSelectedLanguage
     @State private var auth = AuthService.shared
+    @State private var onboarding = OnboardingService.shared
 
     var body: some Scene {
         WindowGroup {
@@ -11,6 +12,11 @@ struct PushThruApp: App {
                 .preferredColorScheme(.dark)
                 .onOpenURL { url in
                     AuthService.handleRedirect(url)
+                }
+                .onChange(of: auth.isSignedIn) { _, isSignedIn in
+                    if isSignedIn {
+                        Task { await onboarding.checkProfile() }
+                    }
                 }
                 .alert(
                     "Sign-in problem",
@@ -40,8 +46,6 @@ struct PushThruApp: App {
                     Task { await auth.signIn() }
                 },
                 onCreateAccount: {
-                    // Opens the hosted page directly on the sign-up view.
-                    // DOB / age gate gets inserted after first sign-up (next step).
                     Task { await auth.createAccount() }
                 }
             )
@@ -53,8 +57,18 @@ struct PushThruApp: App {
                 }
             }
         } else {
-            ChatView()
+            switch onboarding.status {
+            case .checking:
+                ProgressView()
+                    .controlSize(.large)
+                    .task {
+                        await onboarding.checkProfile()
+                    }
+            case .needsDOB, .underage, .checkFailed:
+                DOBGateView()
+            case .ready:
+                ChatView()
+            }
         }
     }
 }
-
