@@ -5,12 +5,19 @@ struct ChatView: View {
     @State private var chatService = ChatService()
     @State private var inputText = ""
     @State private var showingSettings = false
+    @State private var showingProfile = false
     @FocusState private var isInputFocused: Bool
-    
+
+    /// Pre-filled message to send when the view appears (used when the
+    /// Profile screen's "Add injury (via chat)" button hands control back
+    /// to the chat). The parent clears it after we consume it, so a second
+    /// trip through this view doesn't re-fire a stale message.
+    @Binding var pendingPrefill: String?
+
     var body: some View {
         VStack(spacing: 0) {
             header
-            
+
             ScrollViewReader { proxy in
                 ScrollView {
                     LazyVStack(spacing: 8) {
@@ -18,7 +25,7 @@ struct ChatView: View {
                             MessageRow(message: message)
                                 .id(message.id)
                         }
-                        
+
                         if chatService.isLoading {
                             HStack {
                                 TypingIndicator()
@@ -45,32 +52,58 @@ struct ChatView: View {
                     }
                 }
             }
-            
+
             inputBar
         }
         .background(Color(.systemBackground))
         .task {
             await chatService.requestGreeting()
+            await consumePrefillIfAny()
+        }
+        .onChange(of: pendingPrefill) { _, newValue in
+            if newValue != nil {
+                Task { await consumePrefillIfAny() }
+            }
         }
         .sheet(isPresented: $showingSettings) {
-            SettingsView()
+            // Settings presents Profile via its own navigation; when the
+            // user picks "Add injury" there, Profile dismisses up to here
+            // via pendingPrefill (set in PushThruApp).
+            SettingsView(onOpenProfile: {
+                showingSettings = false
+                // Small delay so the Settings sheet is gone before we
+                // present Profile — avoids sheet-stacking glitches.
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                    showingProfile = true
+                }
+            })
+        }
+        .sheet(isPresented: $showingProfile) {
+            ProfileView(prefillChatMessage: $pendingPrefill)
         }
     }
-    
+
+    @MainActor
+    private func consumePrefillIfAny() async {
+        guard let text = pendingPrefill, !text.isEmpty else { return }
+        pendingPrefill = nil
+        await chatService.send(text)
+    }
+
     private var header: some View {
         HStack(spacing: 10) {
             Image("PushThruLogo")
                 .resizable()
                 .scaledToFit()
                 .frame(width: 36, height: 36)
-            
+
             VStack(alignment: .leading, spacing: 1) {
                 Text("PushThru").font(.headline).foregroundColor(.primary)
                 Text("Your training partner").font(.caption2).foregroundColor(.secondary)
             }
-            
+
             Spacer()
-            
+
             Button(action: { showingSettings = true }) {
                 Image(systemName: "gearshape")
                     .font(.system(size: 18))
@@ -82,7 +115,7 @@ struct ChatView: View {
         .background(Color(.systemBackground))
         .overlay(Divider(), alignment: .bottom)
     }
-    
+
     private var inputBar: some View {
         HStack(spacing: 8) {
             TextField("Message PushThru...", text: $inputText)
@@ -93,7 +126,7 @@ struct ChatView: View {
                 .clipShape(Capsule())
                 .focused($isInputFocused)
                 .onSubmit { sendMessage() }
-            
+
             Button(action: sendMessage) {
                 Image(systemName: "arrow.up")
                     .font(.system(size: 16, weight: .semibold))
@@ -110,7 +143,7 @@ struct ChatView: View {
         .background(Color(.systemBackground))
         .overlay(Divider(), alignment: .top)
     }
-    
+
     private func sendMessage() {
         let text = inputText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return }
@@ -123,7 +156,7 @@ struct ChatView: View {
 
 struct MessageRow: View {
     let message: Message
-    
+
     var body: some View {
         if let card = message.card {
             HStack {
@@ -142,11 +175,11 @@ struct MessageRow: View {
 
 struct MessageBubble: View {
     let message: Message
-    
+
     var body: some View {
         HStack {
             if message.role == .user { Spacer(minLength: 60) }
-            
+
             Text(message.content)
                 .font(.body)
                 .padding(.horizontal, 14)
@@ -158,7 +191,7 @@ struct MessageBubble: View {
                 )
                 .foregroundColor(message.role == .user ? .white : .primary)
                 .clipShape(RoundedRectangle(cornerRadius: 16))
-            
+
             if message.role == .assistant { Spacer(minLength: 60) }
         }
         .padding(.horizontal, 16)
@@ -169,7 +202,7 @@ struct MessageBubble: View {
 
 struct CardView: View {
     let card: Card
-    
+
     var body: some View {
         switch card {
         case .planOverview(let plan):
@@ -186,7 +219,7 @@ struct CardView: View {
 
 struct PlanOverviewCardView: View {
     let plan: PlanOverviewCard
-    
+
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 6) {
@@ -203,7 +236,7 @@ struct PlanOverviewCardView: View {
                         .foregroundColor(.secondary)
                 }
             }
-            
+
             VStack(spacing: 8) {
                 ForEach(plan.exercises) { exercise in
                     HStack(alignment: .firstTextBaseline, spacing: 8) {
@@ -211,7 +244,7 @@ struct PlanOverviewCardView: View {
                             .font(.system(size: 11))
                             .foregroundColor(.secondary)
                             .frame(width: 12, alignment: .trailing)
-                        
+
                         VStack(alignment: .leading, spacing: 2) {
                             Text(exercise.name)
                                 .font(.system(size: 13))
@@ -222,16 +255,16 @@ struct PlanOverviewCardView: View {
                                     .foregroundColor(.secondary)
                             }
                         }
-                        
+
                         Spacer()
-                        
+
                         Text(loadText(for: exercise))
                             .font(.system(size: 12))
                             .foregroundColor(.secondary)
                     }
                 }
             }
-            
+
             if !plan.safetyNotes.isEmpty {
                 Divider()
                 HStack(alignment: .top, spacing: 6) {
@@ -252,7 +285,7 @@ struct PlanOverviewCardView: View {
         )
         .clipShape(RoundedRectangle(cornerRadius: 12))
     }
-    
+
     private func loadText(for exercise: PlannedExercise) -> String {
         if let load = exercise.load {
             return "\(exercise.sets) · \(load)"
@@ -265,7 +298,7 @@ struct PlanOverviewCardView: View {
 
 struct SessionSummaryCardView: View {
     let summary: SessionSummaryCard
-    
+
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 6) {
@@ -282,7 +315,7 @@ struct SessionSummaryCardView: View {
                         .foregroundColor(.secondary)
                 }
             }
-            
+
             VStack(spacing: 6) {
                 ForEach(summary.exercises) { exercise in
                     HStack {
@@ -296,9 +329,9 @@ struct SessionSummaryCardView: View {
                     }
                 }
             }
-            
+
             Divider()
-            
+
             HStack(spacing: 16) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Sets").font(.system(size: 10)).foregroundColor(.secondary)
@@ -319,14 +352,14 @@ struct SessionSummaryCardView: View {
         )
         .clipShape(RoundedRectangle(cornerRadius: 12))
     }
-    
+
     private func setsText(for exercise: SummaryExercise) -> String {
         if let weight = exercise.topWeightKg, weight > 0 {
             return "\(exercise.setsCompleted) sets @ \(formatWeight(weight))"
         }
         return "\(exercise.setsCompleted) sets"
     }
-    
+
     private func formatWeight(_ weight: Double) -> String {
         if weight == weight.rounded() {
             return "\(Int(weight))kg"
@@ -340,7 +373,7 @@ struct SessionSummaryCardView: View {
 struct TypingIndicator: View {
     @State private var dotCount = 0
     let timer = Timer.publish(every: 0.4, on: .main, in: .common).autoconnect()
-    
+
     var body: some View {
         HStack(spacing: 4) {
             ForEach(0..<3) { index in

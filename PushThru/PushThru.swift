@@ -6,6 +6,12 @@ struct PushThruApp: App {
     @State private var auth = AuthService.shared
     @State private var onboarding = OnboardingService.shared
 
+    /// Pre-filled message passed from the Profile screen's "Add injury
+    /// (via chat)" button down to ChatView. Lives at app scope so it
+    /// survives the Settings→Profile→dismiss sequence; ChatView consumes
+    /// and clears it on next appearance.
+    @State private var pendingChatPrefill: String? = nil
+
     var body: some Scene {
         WindowGroup {
             rootView
@@ -67,8 +73,9 @@ struct PushThruApp: App {
             case .needsDOB, .underage, .checkFailed:
                 DOBGateView()
             case .ready:
-                ChatView()
+                ChatView(pendingPrefill: $pendingChatPrefill)
             }
         }
     }
 }
+
